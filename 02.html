@@ -1,0 +1,26 @@
+<canvas width='200' height='200' id='canvas'>Your browser does not support canvas - go get Chrome!</canvas>
+
+<script type="text/javascript">
+
+var canvas;
+var context;
+
+window.onload = function() {
+       // Определение контекста рисования
+       canvas = document.getElementById('canvas');
+
+       if (canvas.getContext) {
+        context = canvas.getContext("2d");  
+           // Обновляем холст через 0.02 секунды
+           setTimeout("drawFrame()", 20);
+       }
+}
+
+function drawFrame(){
+  context.beginPath();
+  context.rect(50, 50, 100, 100);
+  context.fillStyle = '#000000';
+  context.fill();
+}
+
+</script>

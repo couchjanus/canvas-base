@@ -1,0 +1,16 @@
+<canvas width='200' height='200' id='canvas'>Your browser does not support canvas - go get Chrome!</canvas>
+
+<script type="text/javascript">
+
+var canvas = document.getElementById('canvas');
+
+if (canvas.getContext) {
+  var context = canvas.getContext('2d');
+
+  context.beginPath();
+  context.rect(50, 50, 100, 100);
+  context.fillStyle = '#000000';
+  context.fill();
+}
+
+</script>
