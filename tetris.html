@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html>
+<head>
+</head>
+
+<body>
+
+<body style="text-align: center">
+    <div class="scores">
+        Score: <span id="score"></span> Level: <span id="level"></span>
+        <button id="newGame" onclick="initBoard()">New game</button>
+        <p> Use arrows </p>
+    </div>
+    <br>
+    <canvas id="tetris" width="400" height="800"></canvas>
+    
+</body>
+
+</html>
+
+<script >
+
+const canvas = document.getElementById("tetris");
+const ctx = canvas.getContext("2d");
+const scoreEl = document.getElementById("score");
+const levelEl = document.getElementById("level");
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+const GAME_WIDTH = 10;
+const GAME_HEIGHT = 20;
+const SHAPE_SIZE = 4;
+const BOARD_SIZE_X = WIDTH / GAME_WIDTH;
+const BOARD_SIZE_Y = HEIGHT / GAME_HEIGHT;
+const BLOCK_SIZE = HEIGHT / 20;
+let board = [];
+let currentShape = [];
+let timer = null;
+let currentShapeYPosition, currentShapeXPosition, currentShapeColor, gameSpeed, score, level;
+var BlockType;
+(function (BlockType) {
+    BlockType[BlockType["EMPTY"] = 0] = "EMPTY";
+    BlockType[BlockType["BLOCK"] = 1] = "BLOCK";
+})(BlockType || (BlockType = {}));
+var Key;
+(function (Key) {
+    Key[Key["LEFT"] = 37] = "LEFT";
+    Key[Key["RIGHT"] = 39] = "RIGHT";
+    Key[Key["DOWN"] = 40] = "DOWN";
+    Key[Key["UP"] = 38] = "UP";
+})(Key || (Key = {}));
+const shapes = [
+    [0],
+    [
+        0, 1, 0, 0,
+        0, 1, 0, 0,
+        0, 1, 0, 0,
+        0, 1, 0, 0,
+    ],
+    [
+        0, 1, 1, 0,
+        0, 1, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 0, 0,
+    ],
+    [
+        0, 1, 1, 0,
+        0, 0, 1, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 0
+    ],
+    [
+        0, 0, 1, 0,
+        0, 1, 1, 0,
+        0, 1, 0, 0,
+        0, 0, 0, 0,
+    ],
+    [
+        0, 1, 0, 0,
+        0, 1, 1, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 0
+    ],
+    [
+        0, 1, 0, 0,
+        0, 1, 1, 0,
+        0, 1, 0, 0,
+        0, 0, 0, 0
+    ],
+    [
+        0, 0, 0, 0,
+        0, 1, 1, 0,
+        0, 1, 1, 0,
+        0, 0, 0, 0,
+    ],
+];
+const shapeColors = [
+    "black", "green", "cyan", "orange", "red", "blue", "yellow", "brown"
+];
+const draw = (x, y) => {
+    ctx.fillRect(BLOCK_SIZE * x, BLOCK_SIZE * y, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+    ctx.strokeRect(BLOCK_SIZE * x, BLOCK_SIZE * y, BLOCK_SIZE - 1, BLOCK_SIZE - 1);
+};
+const drawBlock = (x, y, isDefault = false) => {
+    ctx.fillStyle = isDefault ? "powderblue" : currentShapeColor;
+    draw(x, y);
+};
+const fillEmpty = (x, y) => {
+    ctx.fillStyle = shapeColors[0];
+    draw(x, y);
+};
+const clear = () => ctx.clearRect(0, 0, WIDTH, HEIGHT);
+const drawBoard = () => {
+    for (let x = 0; x < GAME_WIDTH; ++x) {
+        for (let y = 0; y < GAME_HEIGHT; ++y) {
+            if (board[y][x] === BlockType.BLOCK) {
+                drawBlock(x, y, true);
+            }
+            else if (board[y][x] === BlockType.EMPTY) {
+                fillEmpty(x, y);
+            }
+        }
+    }
+};
+const drawCurrentShape = () => {
+    let y = 0;
+    for (let x = 0; x < currentShape.length; x++) {
+        if (currentShape[x] === BlockType.BLOCK) {
+            if (currentShapeYPosition + y >= 0) {
+                drawBlock(x % SHAPE_SIZE + currentShapeXPosition, currentShapeYPosition + y);
+            }
+        }
+        if ((x % SHAPE_SIZE) === (SHAPE_SIZE - 1)) {
+            y++;
+        }
+        if (currentShapeYPosition >= 20) {
+            generateRandomShape();
+        }
+    }
+};
+const render = () => {
+    clear();
+    drawBoard();
+    drawCurrentShape();
+};
+const frame = () => {
+    clearTimeout(timer);
+    render();
+    if (canMoveDown()) {
+        currentShapeYPosition++;
+    }
+    else {
+        saveShapePositionToBoard();
+    }
+    timer = setTimeout(() => {
+        requestAnimationFrame(frame);
+    }, gameSpeed);
+};
+const saveShapePositionToBoard = () => {
+    let y = 0;
+    for (let x = 0; x < currentShape.length; x++) {
+        if (currentShape[x] === BlockType.BLOCK) {
+            board[currentShapeYPosition + y][x % SHAPE_SIZE + currentShapeXPosition] = BlockType.BLOCK;
+        }
+        if ((x % SHAPE_SIZE) === (SHAPE_SIZE - 1)) {
+            y++;
+        }
+    }
+    collapseRows();
+    generateRandomShape();
+};
+const collapseRows = () => {
+    let completeRows = GAME_HEIGHT;
+    let rowCompleted = true;
+    let collapsedRows = 0;
+    rows: for (let y = 0; y < GAME_HEIGHT; ++y) {
+        rowCompleted = true;
+        for (let x = 0; x < GAME_WIDTH; ++x) {
+            if (board[y][x] === BlockType.EMPTY) {
+                completeRows--;
+                rowCompleted = false;
+                continue rows;
+            }
+        }
+        if (rowCompleted) {
+            for (let yy = y; yy > 0; yy--) {
+                board[yy] = board[yy - 1];
+            }
+            collapsedRows++;
+        }
+    }
+    score += collapsedRows * 100;
+    if (collapsedRows) {
+        updateScore();
+    }
+};
+const updateScore = () => {
+    scoreEl.innerHTML = `${score}`;
+    if (score % 3000 == 0) {
+        // gameSpeed -= 75;
+        level++;
+        levelEl.innerHTML = `${level}`;
+    }
+};
+const canMoveLeft = () => {
+    if (currentShapeYPosition < 0)
+        return false;
+    let y = 0;
+    for (let x = 0; x < currentShape.length; x++) {
+        if (currentShape[x] === BlockType.BLOCK) {
+            let nextX = x % SHAPE_SIZE + currentShapeXPosition - 1;
+            let nextY = currentShapeYPosition + y;
+            if (nextX < 0 || board[nextY][nextX] === BlockType.BLOCK) {
+                return false;
+            }
+        }
+        if ((x % SHAPE_SIZE) === (SHAPE_SIZE - 1)) {
+            y++;
+        }
+    }
+    return true;
+};
+const canMoveRight = () => {
+    if (currentShapeYPosition < 0)
+        return false;
+    let y = 0;
+    for (let x = 0; x < currentShape.length; x++) {
+        if (currentShape[x] === BlockType.BLOCK) {
+            let nextX = x % SHAPE_SIZE + currentShapeXPosition + 1;
+            let nextY = currentShapeYPosition + y;
+            if (nextX >= GAME_WIDTH || board[nextY][nextX] === BlockType.BLOCK) {
+                return false;
+            }
+        }
+        if ((x % SHAPE_SIZE) === (SHAPE_SIZE - 1)) {
+            y++;
+        }
+    }
+    return true;
+};
+const canMoveDown = () => {
+    if (currentShapeYPosition < 0)
+        return true;
+    let y = 0;
+    for (let x = 0; x < currentShape.length; x++) {
+        if (currentShape[x] === BlockType.BLOCK) {
+            let nextX = x % SHAPE_SIZE + currentShapeXPosition;
+            let nextY = currentShapeYPosition + y + 1;
+            if (currentShapeYPosition === 0 && board[nextY][nextX] === BlockType.BLOCK)
+                gameOver();
+            if (nextY >= GAME_HEIGHT || board[nextY][nextX] === BlockType.BLOCK) {
+                return false;
+            }
+        }
+        if ((x % SHAPE_SIZE) === (SHAPE_SIZE - 1)) {
+            y++;
+        }
+    }
+    return true;
+};
+const canRotate = (shapeCopy) => {
+    if (currentShapeYPosition < 0)
+        return false;
+    let yy = 0;
+    let check = currentShape.length;
+    let checkForShape = false;
+    for (let y = 0; y < GAME_HEIGHT; ++y) {
+        for (let x = 0; x < GAME_WIDTH; ++x) {
+            if (x >= currentShapeXPosition && x < (currentShapeXPosition + SHAPE_SIZE) && y >= currentShapeYPosition && y < (currentShapeYPosition + SHAPE_SIZE)) {
+                if (shapeCopy[(x - currentShapeXPosition) + yy] === BlockType.BLOCK && board[y][x] === BlockType.BLOCK)
+                    return false;
+                check--;
+                checkForShape = true;
+            }
+        }
+        if (checkForShape)
+            yy += SHAPE_SIZE;
+    }
+    if (check)
+        return false;
+    return true;
+};
+const moveLeft = () => {
+    if (canMoveLeft()) {
+        currentShapeXPosition--;
+        render();
+    }
+};
+const moveRight = () => {
+    if (canMoveRight()) {
+        currentShapeXPosition++;
+        render();
+    }
+};
+const moveDown = () => {
+    if (canMoveDown()) {
+        currentShapeYPosition++;
+        render();
+    }
+};
+const rotateCurrentShape = () => {
+    let shapeCopy = [];
+    let rowLength = SHAPE_SIZE;
+    for (let i = 0; i < currentShape.length; i++) {
+        let x = i % rowLength;
+        let y = ~~(i / rowLength);
+        let newX = rowLength - y - 1;
+        let newY = x;
+        let newPosition = newY * rowLength + newX;
+        shapeCopy[newPosition] = currentShape[i];
+    }
+    if (!canRotate(shapeCopy))
+        return;
+    currentShape = shapeCopy;
+    render();
+};
+const generateRandomShape = () => {
+    let randomShapeIndex = ~~(Math.random() * (shapes.length - 1) + 1);
+    currentShape = shapes[randomShapeIndex];
+    currentShapeColor = shapeColors[randomShapeIndex];
+    currentShapeXPosition = 3;
+    currentShapeYPosition = -4;
+};
+const bindEventListener = () => { document.onkeyup = handleEvent; };
+const handleEvent = (e) => {
+    switch (e.keyCode) {
+        case Key.UP:
+            rotateCurrentShape();
+            break;
+        case Key.LEFT:
+            moveLeft();
+            break;
+        case Key.RIGHT:
+            moveRight();
+            break;
+        case Key.DOWN:
+            moveDown();
+            break;
+        default:
+            break;
+    }
+};
+const gameOver = () => {
+    window.alert("Game Over, too bad :/");
+    initBoard();
+};
+const drawEmptyBoard = () => {
+    for (let y = 0; y < GAME_HEIGHT; ++y) {
+        board[y] = [];
+        for (let x = 0; x < GAME_WIDTH; ++x) {
+            board[y][x] = BlockType.EMPTY;
+            fillEmpty(x, y);
+        }
+    }
+};
+const setInitialValues = () => {
+    score = 0;
+    level = 0;
+    gameSpeed = 750;
+    currentShapeXPosition = 3;
+    currentShapeYPosition = -4;
+};
+const initBoard = () => {
+    bindEventListener();
+    drawEmptyBoard();
+    setInitialValues();
+    clearTimeout(timer);
+    updateScore();
+    generateRandomShape();
+    requestAnimationFrame(frame);
+};
+initBoard();
+
+</script>
+</body>
+
+</html>
